@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:currentmillis.com)",
+      "WebFetch(domain:jsonformatter.org)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
