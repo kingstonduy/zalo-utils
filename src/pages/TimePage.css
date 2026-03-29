@@ -54,6 +54,25 @@
   flex-wrap: wrap;
 }
 
+.millis-display {
+  position: relative;
+}
+
+.copy-ts-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 12px !important;
+  padding: 6px 14px !important;
+  transition: all 0.2s;
+}
+
+.copy-ts-btn.copied {
+  background: #22c55e !important;
+  color: #fff !important;
+  border-color: #22c55e !important;
+}
+
 .millis-value {
   font-family: var(--mono);
   font-size: 48px;

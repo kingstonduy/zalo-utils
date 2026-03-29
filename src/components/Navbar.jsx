@@ -14,6 +14,12 @@ function Navbar() {
         <NavLink to="/json" className={({ isActive }) => isActive ? 'active' : ''}>
           JSON Tools
         </NavLink>
+        <NavLink to="/sql" className={({ isActive }) => isActive ? 'active' : ''}>
+          SQL Tools
+        </NavLink>
+        <NavLink to="/redis" className={({ isActive }) => isActive ? 'active' : ''}>
+          Redis
+        </NavLink>
       </div>
     </nav>
   )

@@ -1,14 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import './TimePage.css'
 
-function getLocalISO(date) {
-  const offset = -date.getTimezoneOffset()
-  const sign = offset >= 0 ? '+' : '-'
-  const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')
-  const mins = String(Math.abs(offset) % 60).padStart(2, '0')
-  const local = new Date(date.getTime() + offset * 60000)
-  return local.toISOString().replace('Z', '') + `${sign}${hours}:${mins}`
-}
 
 const ITEM_HEIGHT = 36
 
@@ -129,8 +121,6 @@ function TimePage() {
     setConvertResult({
       utc: d.toUTCString(),
       local: d.toString(),
-      iso: d.toISOString(),
-      localISO: getLocalISO(d),
     })
   }, [convertMillis])
 
@@ -144,7 +134,6 @@ function TimePage() {
       millis: d.getTime(),
       seconds: Math.floor(d.getTime() / 1000),
       utc: d.toUTCString(),
-      iso: d.toISOString(),
     })
   }, [dateTextInput])
 
@@ -186,7 +175,6 @@ function TimePage() {
             <div className="time-row"><span className="time-label">Milliseconds</span><span className="time-value">{result.millis}</span></div>
             <div className="time-row"><span className="time-label">Seconds</span><span className="time-value">{result.seconds}</span></div>
             <div className="time-row"><span className="time-label">UTC</span><span className="time-value">{result.utc}</span></div>
-            <div className="time-row"><span className="time-label">ISO 8601</span><span className="time-value">{result.iso}</span></div>
           </div>
         )}
       </div>
@@ -203,6 +191,13 @@ function TimePage() {
         <div className="millis-display">
           <div className="millis-label">Current Unix Timestamp (milliseconds)</div>
           <div className="millis-value">{millis.toLocaleString()}</div>
+          <button className="copy-ts-btn btn-secondary" onClick={(e) => {
+            navigator.clipboard.writeText(String(millis))
+            const btn = e.currentTarget
+            btn.textContent = 'Copied!'
+            btn.classList.add('copied')
+            setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied') }, 1500)
+          }}>Copy</button>
         </div>
       </section>
 
@@ -231,8 +226,6 @@ function TimePage() {
               <div className="time-grid compact">
                 <div className="time-row"><span className="time-label">UTC</span><span className="time-value">{convertResult.utc}</span></div>
                 <div className="time-row"><span className="time-label">Local</span><span className="time-value">{convertResult.local}</span></div>
-                <div className="time-row"><span className="time-label">ISO 8601</span><span className="time-value">{convertResult.iso}</span></div>
-                <div className="time-row"><span className="time-label">ISO Local</span><span className="time-value">{convertResult.localISO}</span></div>
               </div>
             )}
           </div>

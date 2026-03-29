@@ -1,0 +1,233 @@
+.sql-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.sql-page h1 {
+  font-size: 32px;
+  margin: 0 0 4px;
+  letter-spacing: -0.5px;
+}
+
+.sql-page .page-subtitle {
+  color: var(--text);
+  margin-bottom: 20px;
+  font-size: 15px;
+}
+
+/* Toolbar */
+.sql-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.sql-toolbar .toolbar-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sql-toolbar .toolbar-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  align-self: center;
+}
+
+.sql-toolbar button {
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg);
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.sql-toolbar button:hover {
+  background: var(--code-bg);
+  border-color: var(--accent);
+}
+
+.sql-toolbar button.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.sql-toolbar button.btn-primary:hover {
+  opacity: 0.85;
+}
+
+.sql-toolbar button.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
+}
+
+.sql-toolbar button.btn-secondary:hover {
+  background: var(--code-bg);
+  border-color: var(--border);
+}
+
+/* Status */
+.sql-status {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  animation: sqlStatusSlide 0.2s ease-out;
+}
+
+@keyframes sqlStatusSlide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sql-status-success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.sql-status-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  .sql-status-success { color: #4ade80; }
+  .sql-status-error { color: #f87171; }
+}
+
+/* Panels */
+.sql-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  min-height: 500px;
+}
+
+@media (max-width: 800px) {
+  .sql-panels {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+}
+
+.sql-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.sql-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--code-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  border-bottom: 1px solid var(--border);
+}
+
+.sql-panel .panel-info {
+  font-weight: 400;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.sql-editor {
+  flex: 1;
+  min-height: 450px;
+  padding: 16px;
+  border: none;
+  resize: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--bg);
+  color: var(--text-h);
+  outline: none;
+  tab-size: 2;
+}
+
+.sql-editor::placeholder {
+  color: var(--text);
+  opacity: 0.5;
+}
+
+.sql-output {
+  overflow: auto;
+}
+
+.sql-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sql-placeholder {
+  color: var(--text);
+  opacity: 0.5;
+}
+
+@media (max-width: 800px) {
+  .sql-editor {
+    min-height: 250px;
+  }
+}
+
+/* Syntax Highlighting */
+.sql-keyword {
+  color: #7c3aed;
+  font-weight: 700;
+}
+
+.sql-string {
+  color: #16a34a;
+}
+
+.sql-number {
+  color: #2563eb;
+}
+
+.sql-comment {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.sql-identifier {
+  color: #d97706;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sql-keyword { color: #a78bfa; }
+  .sql-string { color: #4ade80; }
+  .sql-number { color: #60a5fa; }
+  .sql-comment { color: #6b7280; }
+  .sql-identifier { color: #fbbf24; }
+}

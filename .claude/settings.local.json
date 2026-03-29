@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:currentmillis.com)",
       "WebFetch(domain:jsonformatter.org)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm run:*)"
     ]
   }
 }
