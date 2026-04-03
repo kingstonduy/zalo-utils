@@ -1,68 +1,24 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import './JsonPage.css'
 
-function JsonPage() {
-  const [input, setInput] = useState('')
-  const [output, setOutput] = useState('')
-  const [indentSize, setIndentSize] = useState(2)
-  const [status, setStatus] = useState(null)
-  const [activeConvert, setActiveConvert] = useState(null)
-
-  const showStatus = useCallback((msg, type = 'success') => {
-    setStatus({ msg, type })
-    setTimeout(() => setStatus(null), 3000)
-  }, [])
-
-  const parseInput = useCallback(() => {
+function computeOutput(text, mode, indent) {
+  if (!text.trim()) return ''
+  if (mode === 'format') {
     try {
-      return JSON.parse(input)
+      return JSON.stringify(JSON.parse(text), null, indent)
     } catch {
-      return null
+      return getDetailedJsonError(text)
     }
-  }, [input])
-
-  const handleFormat = useCallback(() => {
-    const parsed = parseInput()
-    if (parsed === null && input.trim()) {
-      showStatus('Invalid JSON', 'error')
-      setOutput('Error: Invalid JSON\n\n' + getJsonError(input))
-      return
-    }
-    const formatted = JSON.stringify(parsed, null, indentSize)
-    setOutput(formatted)
-    setActiveConvert(null)
-    showStatus('Formatted successfully')
-  }, [input, indentSize, parseInput, showStatus])
-
-  const handleMinify = useCallback(() => {
-    const parsed = parseInput()
-    if (parsed === null && input.trim()) {
-      showStatus('Invalid JSON', 'error')
-      return
-    }
-    setOutput(JSON.stringify(parsed))
-    setActiveConvert(null)
-    showStatus('Minified successfully')
-  }, [input, parseInput, showStatus])
-
-  const handleValidate = useCallback(() => {
+  }
+  if (mode === 'minify') {
     try {
-      JSON.parse(input)
-      showStatus('Valid JSON', 'success')
-      setOutput('Valid JSON')
-    } catch (e) {
-      showStatus('Invalid JSON', 'error')
-      setOutput('Invalid JSON:\n' + e.message)
+      return JSON.stringify(JSON.parse(text))
+    } catch {
+      return getDetailedJsonError(text)
     }
-    setActiveConvert(null)
-  }, [input, showStatus])
-
-  const handleStringToJson = useCallback(() => {
-    let str = input.trim()
-    if (!str) {
-      showStatus('Input is empty', 'error')
-      return
-    }
+  }
+  if (mode === 'str2json') {
+    let str = text.trim()
     try {
       if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
         str = str.slice(1, -1)
@@ -73,58 +29,57 @@ function JsonPage() {
         .replace(/\\t/g, '\t')
         .replace(/\\r/g, '\r')
         .replace(/\\\\/g, '\\')
-
-      const parsed = JSON.parse(unescaped)
-      setOutput(JSON.stringify(parsed, null, indentSize))
-      setActiveConvert('str2json')
-      showStatus('String converted to JSON')
-      return
+      return JSON.stringify(JSON.parse(unescaped), null, indent)
     } catch {
-      try {
-        const parsed = JSON.parse(str)
-        setOutput(JSON.stringify(parsed, null, indentSize))
-        setActiveConvert('str2json')
-        showStatus('String converted to JSON')
-        return
-      } catch {
+      try { return JSON.stringify(JSON.parse(str), null, indent) } catch {
         try {
           const lines = str.split('\n').filter(l => l.trim())
           const objects = lines.map(l => JSON.parse(l.trim()))
-          setOutput(JSON.stringify(objects, null, indentSize))
-          setActiveConvert('str2json')
-          showStatus('Multiple JSON lines converted to array')
-          return
+          return JSON.stringify(objects, null, indent)
         } catch {
           try {
             const fixed = str
               .replace(/'/g, '"')
               .replace(/(\w+)\s*:/g, '"$1":')
               .replace(/,\s*([\]}])/g, '$1')
-            const parsed = JSON.parse(fixed)
-            setOutput(JSON.stringify(parsed, null, indentSize))
-            setActiveConvert('str2json')
-            showStatus('Fixed and converted to JSON (auto-corrected quotes/keys)')
-            return
+            return JSON.stringify(JSON.parse(fixed), null, indent)
           } catch {
-            showStatus('Cannot convert string to valid JSON', 'error')
-            setOutput('Error: Cannot convert the input string to valid JSON.\n\nTips:\n- Ensure proper JSON structure with double quotes\n- Check for missing brackets or braces\n- Remove trailing commas\n- Escape special characters')
+            return 'Error: Input is not a valid JSON string.\n\nThe input could not be parsed as an escaped JSON string, JSONL, or auto-corrected JSON.\n\nTips:\n- Wrap your JSON in quotes if it\'s an escaped string\n- Ensure proper JSON structure with double quotes\n- Check for missing brackets or braces\n- Remove trailing commas'
           }
         }
       }
     }
-  }, [input, indentSize, showStatus])
+  }
+  return ''
+}
+
+function JsonPage() {
+  const [input, setInput] = useState('')
+  const [indentSize, setIndentSize] = useState(2)
+  const [mode, setMode] = useState('format') // format | minify | str2json
+  const inputRef = useRef(null)
+  const outputRef = useRef(null)
+
+  // Compute output directly from input, mode, and indent
+  const output = useMemo(() => computeOutput(input, mode, indentSize), [input, mode, indentSize])
+
+  const autoResize = useCallback((el) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [])
+
+  useEffect(() => { autoResize(inputRef.current) }, [input, autoResize])
+  useEffect(() => { autoResize(outputRef.current) }, [output, autoResize])
 
   const handleCopy = useCallback(() => {
     const content = output || input
     if (!content) return
     navigator.clipboard.writeText(content)
-    showStatus('Copied to clipboard')
-  }, [output, input, showStatus])
+  }, [output, input])
 
   const handleClear = useCallback(() => {
     setInput('')
-    setOutput('')
-    setActiveConvert(null)
   }, [])
 
   return (
@@ -132,43 +87,7 @@ function JsonPage() {
       <h1>JSON Tools</h1>
       <p className="page-subtitle">Format, validate, convert, and transform JSON data</p>
 
-      {/* Toolbar */}
-      <div className="json-toolbar">
-        <div className="toolbar-group">
-          <button onClick={handleFormat} className="btn-primary" title="Format / Beautify">Format</button>
-          <button onClick={handleMinify} title="Minify / Compact">Minify</button>
-          <button onClick={handleValidate} title="Validate JSON">Validate</button>
-        </div>
-        <div className="toolbar-divider" />
-        <div className="toolbar-group">
-          <button onClick={handleStringToJson} className={`btn-highlight ${activeConvert === 'str2json' ? 'active' : ''}`}>String to JSON</button>
-        </div>
-        <div className="toolbar-divider" />
-        <div className="toolbar-group">
-          <button onClick={handleCopy} className="btn-secondary">Copy</button>
-          <button onClick={handleClear} className="btn-secondary">Clear</button>
-        </div>
-        <div className="toolbar-group toolbar-settings">
-          <label>
-            Indent:
-            <select value={indentSize} onChange={(e) => setIndentSize(Number(e.target.value))}>
-              <option value={2}>2 spaces</option>
-              <option value={3}>3 spaces</option>
-              <option value={4}>4 spaces</option>
-              <option value={1}>1 tab</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      {/* Status bar */}
-      {status && (
-        <div className={`json-status json-status-${status.type}`}>
-          {status.msg}
-        </div>
-      )}
-
-      {/* Editor Panels */}
+      {/* Editor Panels with buttons column in between */}
       <div className="json-panels">
         <div className="json-panel">
           <div className="panel-header">
@@ -176,6 +95,7 @@ function JsonPage() {
             <span className="panel-info">{input.length} chars</span>
           </div>
           <textarea
+            ref={inputRef}
             className="json-editor"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -184,12 +104,31 @@ function JsonPage() {
           />
         </div>
 
+        <div className="json-actions">
+          <label className="indent-setting">
+            Indent:
+            <select value={indentSize} onChange={(e) => setIndentSize(Number(e.target.value))}>
+              <option value={2}>2 spaces</option>
+              <option value={3}>3 spaces</option>
+              <option value={4}>4 spaces</option>
+              <option value={1}>1 tab</option>
+            </select>
+          </label>
+          <button onClick={handleCopy} className="btn-secondary">Copy</button>
+          <button onClick={handleClear} className="btn-secondary">Clear</button>
+          <div className="actions-divider" />
+          <button onClick={() => setMode('format')} className={mode === 'format' ? 'btn-primary' : ''}>Format</button>
+          <button onClick={() => setMode('minify')} className={mode === 'minify' ? 'btn-primary' : ''}>Minify</button>
+          <button onClick={() => setMode('str2json')} className={mode === 'str2json' ? 'btn-primary' : ''}>String to JSON</button>
+        </div>
+
         <div className="json-panel">
           <div className="panel-header">
-            <span>Output {activeConvert && `(${activeConvert.toUpperCase()})`}</span>
+            <span>Output ({mode === 'str2json' ? 'String to JSON' : mode === 'minify' ? 'Minified' : 'Formatted'})</span>
             <span className="panel-info">{output.length} chars</span>
           </div>
           <textarea
+            ref={outputRef}
             className="json-editor"
             value={output}
             readOnly
@@ -202,12 +141,38 @@ function JsonPage() {
   )
 }
 
-function getJsonError(str) {
+function getDetailedJsonError(str) {
   try {
     JSON.parse(str)
     return ''
   } catch (e) {
-    return e.message
+    const msg = e.message
+    // Try to extract position from error message (e.g. "at position 42")
+    const posMatch = msg.match(/position\s+(\d+)/)
+    if (posMatch) {
+      const pos = parseInt(posMatch[1], 10)
+      const before = str.slice(0, pos)
+      const line = (before.match(/\n/g) || []).length + 1
+      const col = pos - before.lastIndexOf('\n')
+      const char = pos < str.length ? JSON.stringify(str[pos]) : 'end of input'
+
+      const lines = str.split('\n')
+      const startLine = Math.max(0, line - 3)
+      const endLine = Math.min(lines.length, line + 2)
+      let snippet = ''
+      for (let i = startLine; i < endLine; i++) {
+        const marker = i === line - 1 ? '>' : ' '
+        snippet += `${marker} ${String(i + 1).padStart(4)} | ${lines[i]}\n`
+        if (i === line - 1) {
+          snippet += `       ${' '.repeat(col - 1)}^\n`
+        }
+      }
+
+      return `Invalid JSON at line ${line}, column ${col}\n` +
+        `Unexpected character: ${char}\n\n` +
+        snippet + '\n' + msg
+    }
+    return 'Invalid JSON\n\n' + msg
   }
 }
 

@@ -151,89 +151,86 @@ function RedisPage() {
         <div className={`redis-status redis-status-${status.type}`}>{status.msg}</div>
       )}
 
-      <div className="redis-layout">
-        {/* Left: Search panel */}
-        <div className="redis-sidebar">
-          {/* Get by key */}
-          <section className="redis-card">
-            <h2>Get Key</h2>
-            <div className="query-mode-toggle">
-              <button
-                className={queryMode === 'string' ? 'active' : ''}
-                onClick={() => setQueryMode('string')}
-              >String Key</button>
-              <button
-                className={queryMode === 'bytes' ? 'active' : ''}
-                onClick={() => setQueryMode('bytes')}
-              >Byte Array Key</button>
-            </div>
-            <div className="redis-input-row">
-              <input
-                type="text"
-                placeholder={queryMode === 'bytes' ? 'Enter string (converts to byte array)' : 'Enter key name (e.g. user:1)'}
-                value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleGet()}
-              />
-              <button className="btn-primary" onClick={handleGet} disabled={loading}>
-                {loading ? 'Loading...' : 'Get'}
-              </button>
-            </div>
-          </section>
-
-          {/* Pattern search */}
-          <section className="redis-card">
-            <h2>Search Keys</h2>
-            <div className="redis-input-row">
-              <input
-                type="text"
-                placeholder="Pattern (e.g. user:* or session:*)"
-                value={patternInput}
-                onChange={(e) => setPatternInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch('0')}
-              />
-              <button className="btn-primary" onClick={() => handleSearch('0')} disabled={searchLoading}>
-                {searchLoading ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-
-            {/* Search results list */}
-            {searchResults && (
-              <div className="search-results-list">
-                {searchResults.length === 0 ? (
-                  <div className="search-empty">No keys found</div>
-                ) : (
-                  <>
-                    {searchResults.map((item, i) => (
-                      <div
-                        key={i}
-                        className="search-result-item"
-                        onClick={() => handleKeyClick(item.key)}
-                      >
-                        <span className="search-key">{item.key}</span>
-                        <div className="search-meta">
-                          <span className={`type-badge type-${item.type}`}>{item.type}</span>
-                          <span className="ttl-badge">{formatTtl(item.ttl)}</span>
-                        </div>
-                      </div>
-                    ))}
-                    {searchCursor !== '0' && (
-                      <button
-                        className="load-more-btn"
-                        onClick={() => handleSearch(searchCursor)}
-                        disabled={searchLoading}
-                      >
-                        {searchLoading ? 'Loading...' : 'Load More'}
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </section>
+      {/* Search bar — full width at top */}
+      <div className="redis-search-bar">
+        <div className="redis-search-section">
+          <div className="query-mode-toggle">
+            <button
+              className={queryMode === 'string' ? 'active' : ''}
+              onClick={() => setQueryMode('string')}
+            >String Key</button>
+            <button
+              className={queryMode === 'bytes' ? 'active' : ''}
+              onClick={() => setQueryMode('bytes')}
+            >Byte Array Key</button>
+          </div>
+          <div className="redis-input-row">
+            <input
+              type="text"
+              placeholder={queryMode === 'bytes' ? 'Enter string (converts to byte array)' : 'Enter key name (e.g. user:1)'}
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleGet()}
+            />
+            <button className="btn-primary" onClick={handleGet} disabled={loading}>
+              {loading ? 'Loading...' : 'Get'}
+            </button>
+          </div>
         </div>
+        <div className="redis-search-divider" />
+        <div className="redis-search-section">
+          <div className="redis-input-row">
+            <input
+              type="text"
+              placeholder="Search pattern (e.g. user:* or session:*)"
+              value={patternInput}
+              onChange={(e) => setPatternInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch('0')}
+            />
+            <button className="btn-primary" onClick={() => handleSearch('0')} disabled={searchLoading}>
+              {searchLoading ? 'Searching...' : 'Search'}
+            </button>
+          </div>
+        </div>
+      </div>
 
-        {/* Right: Result panel */}
+      {/* Results area */}
+      <div className="redis-results">
+        {/* Search results list */}
+        {searchResults && (
+          <div className="search-results-list">
+            {searchResults.length === 0 ? (
+              <div className="search-empty">No keys found</div>
+            ) : (
+              <>
+                {searchResults.map((item, i) => (
+                  <div
+                    key={i}
+                    className="search-result-item"
+                    onClick={() => handleKeyClick(item.key)}
+                  >
+                    <span className="search-key">{item.key}</span>
+                    <div className="search-meta">
+                      <span className={`type-badge type-${item.type}`}>{item.type}</span>
+                      <span className="ttl-badge">{formatTtl(item.ttl)}</span>
+                    </div>
+                  </div>
+                ))}
+                {searchCursor !== '0' && (
+                  <button
+                    className="load-more-btn"
+                    onClick={() => handleSearch(searchCursor)}
+                    disabled={searchLoading}
+                  >
+                    {searchLoading ? 'Loading...' : 'Load More'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Result panel */}
         <div className="redis-result-panel">
           {result ? (
             <section className="redis-card result-card">

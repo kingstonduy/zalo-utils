@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import './SqlPage.css'
 
 const KEYWORDS = [
@@ -27,7 +27,6 @@ function formatSql(sql) {
   let newline = false
   const indentStr = () => '  '.repeat(indent)
 
-  // Keywords that start a new line at current indent
   const newLineBefore = new Set([
     'SELECT','FROM','WHERE','SET','VALUES','ORDER','GROUP','HAVING',
     'LIMIT','UNION','INSERT','UPDATE','DELETE','CREATE','ALTER','DROP',
@@ -35,7 +34,6 @@ function formatSql(sql) {
     'WHEN','ELSE','END','WITH','TRUNCATE',
   ])
 
-  // Keywords that increase indent after them
   const indentAfter = new Set(['SELECT','SET','VALUES','('])
   const dedentBefore = new Set(['FROM','WHERE','ORDER','GROUP','HAVING','LIMIT',')'])
 
@@ -43,7 +41,6 @@ function formatSql(sql) {
     const token = tokens[i]
     const upper = token.toUpperCase()
 
-    // Skip whitespace tokens
     if (/^\s+$/.test(token)) continue
 
     const isKeyword = KEYWORD_SET.has(upper)
@@ -94,14 +91,12 @@ function tokenize(sql) {
   const tokens = []
   let i = 0
   while (i < sql.length) {
-    // Whitespace
     if (/\s/.test(sql[i])) {
       let start = i
       while (i < sql.length && /\s/.test(sql[i])) i++
       tokens.push(sql.slice(start, i))
       continue
     }
-    // Quoted string (single)
     if (sql[i] === "'") {
       let start = i
       i++
@@ -110,7 +105,6 @@ function tokenize(sql) {
       tokens.push(sql.slice(start, i))
       continue
     }
-    // Quoted string (double)
     if (sql[i] === '"') {
       let start = i
       i++
@@ -119,7 +113,6 @@ function tokenize(sql) {
       tokens.push(sql.slice(start, i))
       continue
     }
-    // Backtick identifier
     if (sql[i] === '`') {
       let start = i
       i++
@@ -128,14 +121,12 @@ function tokenize(sql) {
       tokens.push(sql.slice(start, i))
       continue
     }
-    // Line comment
     if (sql[i] === '-' && sql[i + 1] === '-') {
       let start = i
       while (i < sql.length && sql[i] !== '\n') i++
       tokens.push(sql.slice(start, i))
       continue
     }
-    // Block comment
     if (sql[i] === '/' && sql[i + 1] === '*') {
       let start = i
       i += 2
@@ -144,13 +135,11 @@ function tokenize(sql) {
       tokens.push(sql.slice(start, i))
       continue
     }
-    // Symbols
     if ('(),;*'.includes(sql[i])) {
       tokens.push(sql[i])
       i++
       continue
     }
-    // Operators
     if ('<>=!'.includes(sql[i])) {
       let start = i
       i++
@@ -158,7 +147,6 @@ function tokenize(sql) {
       tokens.push(sql.slice(start, i))
       continue
     }
-    // Word / number / identifier
     let start = i
     while (i < sql.length && /[^\s(),;'"` <>!=*/\-]/.test(sql[i])) i++
     if (i > start) tokens.push(sql.slice(start, i))
@@ -176,9 +164,19 @@ function minifySql(sql) {
     .trim()
 }
 
+function uppercaseKeywords(sql) {
+  const tokens = tokenize(sql)
+  return tokens.map(t => KEYWORD_SET.has(t.toUpperCase()) ? t.toUpperCase() : t).join('')
+}
+
+function lowercaseKeywords(sql) {
+  const tokens = tokenize(sql)
+  return tokens.map(t => KEYWORD_SET.has(t.toUpperCase()) ? t.toLowerCase() : t).join('')
+}
+
 function highlightSql(sql) {
   const tokens = tokenize(sql)
-  return tokens.map((token, i) => {
+  return tokens.map((token) => {
     const upper = token.toUpperCase()
     if (/^\s+$/.test(token)) return token
     if (KEYWORD_SET.has(upper)) return `<span class="sql-keyword">${token}</span>`
@@ -194,120 +192,48 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+function computeSqlOutput(text, mode) {
+  if (!text.trim()) return ''
+  if (mode === 'format') return formatSql(text)
+  if (mode === 'minify') return minifySql(text)
+  if (mode === 'uppercase') return uppercaseKeywords(text)
+  if (mode === 'lowercase') return lowercaseKeywords(text)
+  return ''
+}
+
 function SqlPage() {
   const [input, setInput] = useState('')
-  const [output, setOutput] = useState('')
-  const [status, setStatus] = useState(null)
+  const [mode, setMode] = useState('format') // format | minify | uppercase | lowercase
+  const inputRef = useRef(null)
+  const outputRef = useRef(null)
 
-  const showStatus = useCallback((msg, type = 'success') => {
-    setStatus({ msg, type })
-    setTimeout(() => setStatus(null), 3000)
+  const output = useMemo(() => computeSqlOutput(input, mode), [input, mode])
+
+  const autoResize = useCallback((el) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
   }, [])
 
-  const handleFormat = useCallback(() => {
-    if (!input.trim()) { showStatus('Input is empty', 'error'); return }
-    setOutput(formatSql(input))
-    showStatus('Formatted successfully')
-  }, [input, showStatus])
-
-  const handleMinify = useCallback(() => {
-    if (!input.trim()) { showStatus('Input is empty', 'error'); return }
-    setOutput(minifySql(input))
-    showStatus('Minified successfully')
-  }, [input, showStatus])
-
-  const handleValidate = useCallback(() => {
-    if (!input.trim()) { showStatus('Input is empty', 'error'); return }
-    const tokens = tokenize(input)
-    const errors = []
-
-    // Check balanced parentheses
-    let parenDepth = 0
-    for (const t of tokens) {
-      if (t === '(') parenDepth++
-      if (t === ')') parenDepth--
-      if (parenDepth < 0) { errors.push('Unexpected closing parenthesis'); break }
-    }
-    if (parenDepth > 0) errors.push(`${parenDepth} unclosed parenthesis(es)`)
-
-    // Check unclosed strings
-    let inSingle = false, inDouble = false
-    for (let i = 0; i < input.length; i++) {
-      if (input[i] === "'" && !inDouble) inSingle = !inSingle
-      if (input[i] === '"' && !inSingle) inDouble = !inDouble
-    }
-    if (inSingle) errors.push('Unclosed single-quoted string')
-    if (inDouble) errors.push('Unclosed double-quoted string')
-
-    if (errors.length === 0) {
-      showStatus('SQL syntax looks valid', 'success')
-      setOutput('SQL syntax looks valid (basic check passed)')
-    } else {
-      showStatus('SQL issues found', 'error')
-      setOutput('Issues found:\n' + errors.map(e => '- ' + e).join('\n'))
-    }
-  }, [input, showStatus])
-
-  const handleUppercase = useCallback(() => {
-    if (!input.trim()) { showStatus('Input is empty', 'error'); return }
-    const tokens = tokenize(input)
-    const result = tokens.map(t => KEYWORD_SET.has(t.toUpperCase()) ? t.toUpperCase() : t).join('')
-    setOutput(result)
-    showStatus('Keywords uppercased')
-  }, [input, showStatus])
-
-  const handleLowercase = useCallback(() => {
-    if (!input.trim()) { showStatus('Input is empty', 'error'); return }
-    const tokens = tokenize(input)
-    const result = tokens.map(t => KEYWORD_SET.has(t.toUpperCase()) ? t.toLowerCase() : t).join('')
-    setOutput(result)
-    showStatus('Keywords lowercased')
-  }, [input, showStatus])
+  useEffect(() => { autoResize(inputRef.current) }, [input, autoResize])
+  useEffect(() => { autoResize(outputRef.current) }, [output, autoResize])
 
   const handleCopy = useCallback(() => {
     const content = output || input
     if (!content) return
     navigator.clipboard.writeText(content)
-    showStatus('Copied to clipboard')
-  }, [output, input, showStatus])
+  }, [output, input])
 
   const handleClear = useCallback(() => {
     setInput('')
-    setOutput('')
   }, [])
 
   return (
     <div className="sql-page">
       <h1>SQL Tools</h1>
-      <p className="page-subtitle">Format, minify, validate, and transform SQL queries</p>
+      <p className="page-subtitle">Format, minify, and transform SQL queries</p>
 
-      {/* Toolbar */}
-      <div className="sql-toolbar">
-        <div className="toolbar-group">
-          <button onClick={handleFormat} className="btn-primary">Format</button>
-          <button onClick={handleMinify}>Minify</button>
-          <button onClick={handleValidate}>Validate</button>
-        </div>
-        <div className="toolbar-divider" />
-        <div className="toolbar-group">
-          <button onClick={handleUppercase}>UPPERCASE Keywords</button>
-          <button onClick={handleLowercase}>lowercase keywords</button>
-        </div>
-        <div className="toolbar-divider" />
-        <div className="toolbar-group">
-          <button onClick={handleCopy} className="btn-secondary">Copy</button>
-          <button onClick={handleClear} className="btn-secondary">Clear</button>
-        </div>
-      </div>
-
-      {/* Status */}
-      {status && (
-        <div className={`sql-status sql-status-${status.type}`}>
-          {status.msg}
-        </div>
-      )}
-
-      {/* Editor Panels */}
+      {/* Editor Panels with buttons column in between */}
       <div className="sql-panels">
         <div className="sql-panel">
           <div className="panel-header">
@@ -315,6 +241,7 @@ function SqlPage() {
             <span className="panel-info">{input.length} chars</span>
           </div>
           <textarea
+            ref={inputRef}
             className="sql-editor"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -323,12 +250,22 @@ function SqlPage() {
           />
         </div>
 
+        <div className="sql-actions">
+          <button onClick={handleCopy} className="btn-secondary">Copy</button>
+          <button onClick={handleClear} className="btn-secondary">Clear</button>
+          <div className="actions-divider" />
+          <button onClick={() => setMode('format')} className={mode === 'format' ? 'btn-primary' : ''}>Format</button>
+          <button onClick={() => setMode('minify')} className={mode === 'minify' ? 'btn-primary' : ''}>Minify</button>
+          <button onClick={() => setMode('uppercase')} className={mode === 'uppercase' ? 'btn-primary' : ''}>UPPERCASE</button>
+          <button onClick={() => setMode('lowercase')} className={mode === 'lowercase' ? 'btn-primary' : ''}>lowercase</button>
+        </div>
+
         <div className="sql-panel">
           <div className="panel-header">
-            <span>Output</span>
+            <span>Output ({mode === 'format' ? 'Formatted' : mode === 'minify' ? 'Minified' : mode === 'uppercase' ? 'UPPERCASE' : 'lowercase'})</span>
             <span className="panel-info">{output.length} chars</span>
           </div>
-          <div className="sql-editor sql-output">
+          <div className="sql-editor sql-output" ref={outputRef}>
             {output ? (
               <pre className="sql-highlighted" dangerouslySetInnerHTML={{ __html: highlightSql(output) }} />
             ) : (

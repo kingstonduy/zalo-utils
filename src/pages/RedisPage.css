@@ -49,18 +49,47 @@
   .redis-status-error { color: #f87171; }
 }
 
-/* Layout */
-.redis-layout {
-  display: grid;
-  grid-template-columns: 380px 1fr;
-  gap: 20px;
-  align-items: start;
+/* Search bar — full width at top */
+.redis-search-bar {
+  display: flex;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  align-items: flex-end;
+  flex-wrap: wrap;
 }
 
-@media (max-width: 900px) {
-  .redis-layout {
-    grid-template-columns: 1fr;
+.redis-search-section {
+  flex: 1;
+  min-width: 250px;
+}
+
+.redis-search-divider {
+  width: 1px;
+  height: 40px;
+  background: var(--border);
+  align-self: center;
+}
+
+@media (max-width: 800px) {
+  .redis-search-bar {
+    flex-direction: column;
+    align-items: stretch;
   }
+  .redis-search-divider {
+    width: 100%;
+    height: 1px;
+  }
+}
+
+/* Results area */
+.redis-results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* Cards */

@@ -4,7 +4,8 @@
       "WebFetch(domain:currentmillis.com)",
       "WebFetch(domain:jsonformatter.org)",
       "Bash(npm install:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(ls:*)"
     ]
   }
 }

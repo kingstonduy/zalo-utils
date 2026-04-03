@@ -2,17 +2,18 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import './TimePage.css'
 
 
-const ITEM_HEIGHT = 36
+const ITEM_HEIGHT = 48
 
 function ScrollRoller({ label, value, min, max, onChange }) {
   const viewportRef = useRef(null)
   const dragState = useRef({ dragging: false, startY: 0, accumulated: 0 })
   const [offset, setOffset] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState('')
   const count = max - min + 1
 
   const wrap = (v) => ((v - min) % count + count) % count + min
 
-  // Show 5 items: 2 above, current, 2 below
   const displayItems = [-2, -1, 0, 1, 2].map(d => wrap(value + d))
 
   const onPointerDown = (e) => {
@@ -27,7 +28,6 @@ function ScrollRoller({ label, value, min, max, onChange }) {
     dragState.current.startY = e.clientY
     dragState.current.accumulated += dy
 
-    // While accumulated drag exceeds one item height, step the value
     while (dragState.current.accumulated >= ITEM_HEIGHT) {
       dragState.current.accumulated -= ITEM_HEIGHT
       onChange(wrap(value - 1))
@@ -47,15 +47,31 @@ function ScrollRoller({ label, value, min, max, onChange }) {
     setOffset(0)
   }
 
-  // The track is positioned so item index=2 (the active one) is centered.
-  // Default translateY: -(2 * ITEM_HEIGHT) + ITEM_HEIGHT = -ITEM_HEIGHT
-  // That places item[2] in the middle of the 3-item-high viewport.
+  const handleInputCommit = () => {
+    const num = parseInt(editValue, 10)
+    if (!isNaN(num)) {
+      onChange(Math.max(min, Math.min(max, num)))
+    }
+    setEditing(false)
+  }
+
   const baseTranslate = -ITEM_HEIGHT
   const translateY = baseTranslate + offset
 
   return (
     <div className="scroll-roller">
       <span className="roller-label">{label}</span>
+      <input
+        className="roller-input"
+        type="number"
+        min={min}
+        max={max}
+        value={editing ? editValue : String(value).padStart(2, '0')}
+        onFocus={() => { setEditing(true); setEditValue(String(value)) }}
+        onBlur={handleInputCommit}
+        onChange={(e) => setEditValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { handleInputCommit(); e.target.blur() } }}
+      />
       <div
         className="roller-viewport"
         ref={viewportRef}
@@ -270,17 +286,18 @@ function TimePage() {
           <div className="method-block">
             <h3>Pick a date</h3>
             <div className="picker-area">
-              <input
-                type="date"
-                className="calendar-input"
-                value={calendarDate}
-                onChange={(e) => setCalendarDate(e.target.value)}
-              />
-              <div className="rollers-group">
-                <ScrollRoller label="Hour" value={pickerHour} min={0} max={23} onChange={setPickerHour} />
-                <ScrollRoller label="Min" value={pickerMinute} min={0} max={59} onChange={setPickerMinute} />
-                <ScrollRoller label="Sec" value={pickerSecond} min={0} max={59} onChange={setPickerSecond} />
+              <div className="picker-date-col">
+                <span className="roller-label">Date</span>
+                <input
+                  type="date"
+                  className="calendar-input"
+                  value={calendarDate}
+                  onChange={(e) => setCalendarDate(e.target.value)}
+                />
               </div>
+              <ScrollRoller label="Hour" value={pickerHour} min={0} max={23} onChange={setPickerHour} />
+              <ScrollRoller label="Min" value={pickerMinute} min={0} max={59} onChange={setPickerMinute} />
+              <ScrollRoller label="Sec" value={pickerSecond} min={0} max={59} onChange={setPickerSecond} />
             </div>
             <div className="converter-buttons picker-buttons">
               <button onClick={handlePickerConvert}>Convert</button>
