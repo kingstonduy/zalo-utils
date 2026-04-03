@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import './RedisPage.css'
 
 const API_BASE = '/api/redis'
@@ -22,7 +22,7 @@ function formatTtl(ttl) {
 }
 
 function RedisPage() {
-  const [queryMode, setQueryMode] = useState('string') // string | bytes
+  const [queryMode, setQueryMode] = useState('string')
   const [keyInput, setKeyInput] = useState('')
   const [patternInput, setPatternInput] = useState('')
   const [result, setResult] = useState(null)
@@ -34,10 +34,20 @@ function RedisPage() {
   const [editingTtl, setEditingTtl] = useState(false)
   const [ttlValue, setTtlValue] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const statusTimer = useRef(null)
+
+  // Cleanup status timer on unmount
+  useEffect(() => {
+    return () => { if (statusTimer.current) clearTimeout(statusTimer.current) }
+  }, [])
 
   const showStatus = useCallback((msg, type = 'success') => {
+    if (statusTimer.current) clearTimeout(statusTimer.current)
     setStatus({ msg, type })
-    setTimeout(() => setStatus(null), 3000)
+    statusTimer.current = setTimeout(() => {
+      setStatus(null)
+      statusTimer.current = null
+    }, 3000)
   }, [])
 
   const handleGet = useCallback(async () => {
@@ -77,7 +87,8 @@ function RedisPage() {
       if (cursor === '0') {
         setSearchResults(data.keys)
       } else {
-        setSearchResults(prev => [...(prev || []), ...data.keys])
+        // Concat without spreading the entire previous array
+        setSearchResults(prev => (prev || []).concat(data.keys))
       }
       setSearchCursor(data.cursor)
       showStatus(`Found ${data.keys.length} key(s)`)
@@ -139,30 +150,37 @@ function RedisPage() {
     setQueryMode('string')
   }, [])
 
-  const { formatted, isJson } = result ? tryFormatJson(result.value) : { formatted: '', isJson: false }
+  const setStringMode = useCallback(() => setQueryMode('string'), [])
+  const setBytesMode = useCallback(() => setQueryMode('bytes'), [])
+  const startSearch = useCallback(() => handleSearch('0'), [handleSearch])
+  const cancelTtlEdit = useCallback(() => setEditingTtl(false), [])
+  const startDelete = useCallback(() => setConfirmDelete(true), [])
+  const cancelDelete = useCallback(() => setConfirmDelete(false), [])
+  const startTtlEdit = useCallback(() => {
+    setEditingTtl(true)
+    setTtlValue(result?.ttl === -1 ? '-1' : String(result?.ttl ?? ''))
+  }, [result])
+
+  // Memoize JSON formatting — only recompute when result.value changes
+  const { formatted, isJson } = useMemo(
+    () => result ? tryFormatJson(result.value) : { formatted: '', isJson: false },
+    [result]
+  )
 
   return (
     <div className="redis-page">
       <h1>Redis Search</h1>
       <p className="page-subtitle">Query and browse Redis keys</p>
 
-      {/* Status */}
       {status && (
         <div className={`redis-status redis-status-${status.type}`}>{status.msg}</div>
       )}
 
-      {/* Search bar — full width at top */}
       <div className="redis-search-bar">
         <div className="redis-search-section">
           <div className="query-mode-toggle">
-            <button
-              className={queryMode === 'string' ? 'active' : ''}
-              onClick={() => setQueryMode('string')}
-            >String Key</button>
-            <button
-              className={queryMode === 'bytes' ? 'active' : ''}
-              onClick={() => setQueryMode('bytes')}
-            >Byte Array Key</button>
+            <button className={queryMode === 'string' ? 'active' : ''} onClick={setStringMode}>String Key</button>
+            <button className={queryMode === 'bytes' ? 'active' : ''} onClick={setBytesMode}>Byte Array Key</button>
           </div>
           <div className="redis-input-row">
             <input
@@ -185,18 +203,16 @@ function RedisPage() {
               placeholder="Search pattern (e.g. user:* or session:*)"
               value={patternInput}
               onChange={(e) => setPatternInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch('0')}
+              onKeyDown={(e) => e.key === 'Enter' && startSearch()}
             />
-            <button className="btn-primary" onClick={() => handleSearch('0')} disabled={searchLoading}>
+            <button className="btn-primary" onClick={startSearch} disabled={searchLoading}>
               {searchLoading ? 'Searching...' : 'Search'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Results area */}
       <div className="redis-results">
-        {/* Search results list */}
         {searchResults && (
           <div className="search-results-list">
             {searchResults.length === 0 ? (
@@ -204,11 +220,7 @@ function RedisPage() {
             ) : (
               <>
                 {searchResults.map((item, i) => (
-                  <div
-                    key={i}
-                    className="search-result-item"
-                    onClick={() => handleKeyClick(item.key)}
-                  >
+                  <div key={item.key || i} className="search-result-item" onClick={() => handleKeyClick(item.key)}>
                     <span className="search-key">{item.key}</span>
                     <div className="search-meta">
                       <span className={`type-badge type-${item.type}`}>{item.type}</span>
@@ -217,11 +229,7 @@ function RedisPage() {
                   </div>
                 ))}
                 {searchCursor !== '0' && (
-                  <button
-                    className="load-more-btn"
-                    onClick={() => handleSearch(searchCursor)}
-                    disabled={searchLoading}
-                  >
+                  <button className="load-more-btn" onClick={() => handleSearch(searchCursor)} disabled={searchLoading}>
                     {searchLoading ? 'Loading...' : 'Load More'}
                   </button>
                 )}
@@ -230,11 +238,9 @@ function RedisPage() {
           </div>
         )}
 
-        {/* Result panel */}
         <div className="redis-result-panel">
           {result ? (
             <section className="redis-card result-card">
-              {/* Metadata bar */}
               <div className="result-meta-bar">
                 <div className="result-key-name" title={result.key}>{result.key}</div>
                 <div className="result-meta-badges">
@@ -253,14 +259,10 @@ function RedisPage() {
                           autoFocus
                         />
                         <button onClick={handleTtlUpdate}>Save</button>
-                        <button className="btn-cancel" onClick={() => setEditingTtl(false)}>Cancel</button>
+                        <button className="btn-cancel" onClick={cancelTtlEdit}>Cancel</button>
                       </span>
                     ) : (
-                      <span
-                        className="ttl-clickable"
-                        onClick={() => { setEditingTtl(true); setTtlValue(result.ttl === -1 ? '-1' : String(result.ttl)) }}
-                        title="Click to edit TTL"
-                      >
+                      <span className="ttl-clickable" onClick={startTtlEdit} title="Click to edit TTL">
                         TTL: {formatTtl(result.ttl)}
                       </span>
                     )}
@@ -268,21 +270,19 @@ function RedisPage() {
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="result-actions">
                 <button className="btn-secondary" onClick={handleCopyValue}>Copy Value</button>
                 {confirmDelete ? (
                   <>
                     <span className="delete-confirm-text">Delete this key?</span>
                     <button className="btn-danger" onClick={handleDelete}>Yes, Delete</button>
-                    <button className="btn-secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                    <button className="btn-secondary" onClick={cancelDelete}>Cancel</button>
                   </>
                 ) : (
-                  <button className="btn-danger-outline" onClick={() => setConfirmDelete(true)}>Delete</button>
+                  <button className="btn-danger-outline" onClick={startDelete}>Delete</button>
                 )}
               </div>
 
-              {/* Value */}
               <div className="result-value-container">
                 <div className="result-value-header">
                   <span>Value</span>

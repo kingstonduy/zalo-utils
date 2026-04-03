@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useLayoutEffect, useMemo } from 'react'
 import './JsonPage.css'
 
 function computeOutput(text, mode, indent) {
@@ -53,24 +53,26 @@ function computeOutput(text, mode, indent) {
   return ''
 }
 
+function autoResize(el) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
 function JsonPage() {
   const [input, setInput] = useState('')
   const [indentSize, setIndentSize] = useState(2)
-  const [mode, setMode] = useState('format') // format | minify | str2json
+  const [mode, setMode] = useState('format')
   const inputRef = useRef(null)
   const outputRef = useRef(null)
 
-  // Compute output directly from input, mode, and indent
   const output = useMemo(() => computeOutput(input, mode, indentSize), [input, mode, indentSize])
 
-  const autoResize = useCallback((el) => {
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = el.scrollHeight + 'px'
-  }, [])
-
-  useEffect(() => { autoResize(inputRef.current) }, [input, autoResize])
-  useEffect(() => { autoResize(outputRef.current) }, [output, autoResize])
+  // Single batched layout effect for both textareas
+  useLayoutEffect(() => {
+    autoResize(inputRef.current)
+    autoResize(outputRef.current)
+  }, [input, output])
 
   const handleCopy = useCallback(() => {
     const content = output || input
@@ -82,12 +84,15 @@ function JsonPage() {
     setInput('')
   }, [])
 
+  const setFormat = useCallback(() => setMode('format'), [])
+  const setMinify = useCallback(() => setMode('minify'), [])
+  const setStr2json = useCallback(() => setMode('str2json'), [])
+
   return (
     <div className="json-page">
       <h1>JSON Tools</h1>
       <p className="page-subtitle">Format, validate, convert, and transform JSON data</p>
 
-      {/* Editor Panels with buttons column in between */}
       <div className="json-panels">
         <div className="json-panel">
           <div className="panel-header">
@@ -117,9 +122,9 @@ function JsonPage() {
           <button onClick={handleCopy} className="btn-secondary">Copy</button>
           <button onClick={handleClear} className="btn-secondary">Clear</button>
           <div className="actions-divider" />
-          <button onClick={() => setMode('format')} className={mode === 'format' ? 'btn-primary' : ''}>Format</button>
-          <button onClick={() => setMode('minify')} className={mode === 'minify' ? 'btn-primary' : ''}>Minify</button>
-          <button onClick={() => setMode('str2json')} className={mode === 'str2json' ? 'btn-primary' : ''}>String to JSON</button>
+          <button onClick={setFormat} className={mode === 'format' ? 'btn-primary' : ''}>Format</button>
+          <button onClick={setMinify} className={mode === 'minify' ? 'btn-primary' : ''}>Minify</button>
+          <button onClick={setStr2json} className={mode === 'str2json' ? 'btn-primary' : ''}>String to JSON</button>
         </div>
 
         <div className="json-panel">
@@ -147,7 +152,6 @@ function getDetailedJsonError(str) {
     return ''
   } catch (e) {
     const msg = e.message
-    // Try to extract position from error message (e.g. "at position 42")
     const posMatch = msg.match(/position\s+(\d+)/)
     if (posMatch) {
       const pos = parseInt(posMatch[1], 10)

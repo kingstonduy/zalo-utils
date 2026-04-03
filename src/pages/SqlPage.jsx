@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useLayoutEffect, useMemo } from 'react'
 import './SqlPage.css'
 
 const KEYWORDS = [
@@ -20,33 +20,33 @@ const KEYWORDS = [
 
 const KEYWORD_SET = new Set(KEYWORDS)
 
+// Hoist Sets outside formatSql to avoid recreating on every call
+const NEW_LINE_BEFORE = new Set([
+  'SELECT','FROM','WHERE','SET','VALUES','ORDER','GROUP','HAVING',
+  'LIMIT','UNION','INSERT','UPDATE','DELETE','CREATE','ALTER','DROP',
+  'JOIN','INNER','LEFT','RIGHT','FULL','CROSS','ON','AND','OR',
+  'WHEN','ELSE','END','WITH','TRUNCATE',
+])
+const INDENT_AFTER = new Set(['SELECT','SET','VALUES','('])
+const DEDENT_BEFORE = new Set(['FROM','WHERE','ORDER','GROUP','HAVING','LIMIT',')'])
+
 function formatSql(sql) {
   const tokens = tokenize(sql)
-  let result = ''
+  const parts = []
   let indent = 0
   let newline = false
   const indentStr = () => '  '.repeat(indent)
-
-  const newLineBefore = new Set([
-    'SELECT','FROM','WHERE','SET','VALUES','ORDER','GROUP','HAVING',
-    'LIMIT','UNION','INSERT','UPDATE','DELETE','CREATE','ALTER','DROP',
-    'JOIN','INNER','LEFT','RIGHT','FULL','CROSS','ON','AND','OR',
-    'WHEN','ELSE','END','WITH','TRUNCATE',
-  ])
-
-  const indentAfter = new Set(['SELECT','SET','VALUES','('])
-  const dedentBefore = new Set(['FROM','WHERE','ORDER','GROUP','HAVING','LIMIT',')'])
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]
     const upper = token.toUpperCase()
 
-    if (/^\s+$/.test(token)) continue
+    if (token.charCodeAt(0) <= 32 && /^\s+$/.test(token)) continue
 
     const isKeyword = KEYWORD_SET.has(upper)
 
     if (upper === '(') {
-      result += ' ('
+      parts.push(' (')
       indent++
       newline = true
       continue
@@ -54,27 +54,30 @@ function formatSql(sql) {
 
     if (upper === ')') {
       indent = Math.max(0, indent - 1)
-      result += '\n' + indentStr() + ')'
+      parts.push('\n', indentStr(), ')')
       continue
     }
 
-    if (isKeyword && dedentBefore.has(upper)) {
+    if (isKeyword && DEDENT_BEFORE.has(upper)) {
       indent = Math.max(0, indent - 1)
     }
 
-    if (isKeyword && newLineBefore.has(upper)) {
-      result += '\n' + indentStr() + upper
+    if (isKeyword && NEW_LINE_BEFORE.has(upper)) {
+      parts.push('\n', indentStr(), upper)
     } else if (newline) {
-      result += '\n' + indentStr() + (isKeyword ? upper : token)
+      parts.push('\n', indentStr(), isKeyword ? upper : token)
       newline = false
     } else {
-      if (result.length > 0 && !result.endsWith(' ') && !result.endsWith('\n') && !result.endsWith('(')) {
-        result += ' '
+      if (parts.length > 0) {
+        const last = parts[parts.length - 1]
+        if (last && !last.endsWith(' ') && !last.endsWith('\n') && !last.endsWith('(')) {
+          parts.push(' ')
+        }
       }
-      result += isKeyword ? upper : token
+      parts.push(isKeyword ? upper : token)
     }
 
-    if (isKeyword && indentAfter.has(upper)) {
+    if (isKeyword && INDENT_AFTER.has(upper)) {
       indent++
       newline = true
     }
@@ -84,71 +87,77 @@ function formatSql(sql) {
     }
   }
 
-  return result.trim()
+  return parts.join('').trim()
 }
+
+// Pre-compiled regexes for tokenizer hot path
+const RE_WHITESPACE = /\s/
+const RE_WORD_BOUNDARY = /[^\s(),;'"` <>!=*/-]/
 
 function tokenize(sql) {
   const tokens = []
   let i = 0
-  while (i < sql.length) {
-    if (/\s/.test(sql[i])) {
-      let start = i
-      while (i < sql.length && /\s/.test(sql[i])) i++
+  const len = sql.length
+  while (i < len) {
+    const ch = sql[i]
+    if (RE_WHITESPACE.test(ch)) {
+      const start = i
+      while (i < len && RE_WHITESPACE.test(sql[i])) i++
       tokens.push(sql.slice(start, i))
       continue
     }
-    if (sql[i] === "'") {
-      let start = i
+    if (ch === "'") {
+      const start = i
       i++
-      while (i < sql.length && sql[i] !== "'") { if (sql[i] === '\\') i++; i++ }
-      i++
-      tokens.push(sql.slice(start, i))
-      continue
-    }
-    if (sql[i] === '"') {
-      let start = i
-      i++
-      while (i < sql.length && sql[i] !== '"') { if (sql[i] === '\\') i++; i++ }
+      while (i < len && sql[i] !== "'") { if (sql[i] === '\\') i++; i++ }
       i++
       tokens.push(sql.slice(start, i))
       continue
     }
-    if (sql[i] === '`') {
-      let start = i
+    if (ch === '"') {
+      const start = i
       i++
-      while (i < sql.length && sql[i] !== '`') i++
+      while (i < len && sql[i] !== '"') { if (sql[i] === '\\') i++; i++ }
       i++
       tokens.push(sql.slice(start, i))
       continue
     }
-    if (sql[i] === '-' && sql[i + 1] === '-') {
-      let start = i
-      while (i < sql.length && sql[i] !== '\n') i++
+    if (ch === '`') {
+      const start = i
+      i++
+      while (i < len && sql[i] !== '`') i++
+      i++
       tokens.push(sql.slice(start, i))
       continue
     }
-    if (sql[i] === '/' && sql[i + 1] === '*') {
-      let start = i
+    if (ch === '-' && sql[i + 1] === '-') {
+      const start = i
+      while (i < len && sql[i] !== '\n') i++
+      tokens.push(sql.slice(start, i))
+      continue
+    }
+    if (ch === '/' && sql[i + 1] === '*') {
+      const start = i
       i += 2
-      while (i < sql.length - 1 && !(sql[i] === '*' && sql[i + 1] === '/')) i++
+      while (i < len - 1 && !(sql[i] === '*' && sql[i + 1] === '/')) i++
       i += 2
       tokens.push(sql.slice(start, i))
       continue
     }
-    if ('(),;*'.includes(sql[i])) {
-      tokens.push(sql[i])
+    if (ch === '(' || ch === ')' || ch === ',' || ch === ';' || ch === '*') {
+      tokens.push(ch)
       i++
       continue
     }
-    if ('<>=!'.includes(sql[i])) {
-      let start = i
+    if (ch === '<' || ch === '>' || ch === '=' || ch === '!') {
+      const start = i
       i++
-      if (i < sql.length && '=<>'.includes(sql[i])) i++
+      if (i < len && (sql[i] === '=' || sql[i] === '<' || sql[i] === '>')) i++
       tokens.push(sql.slice(start, i))
       continue
     }
-    let start = i
-    while (i < sql.length && /[^\s(),;'"` <>!=*/\-]/.test(sql[i])) i++
+    const start = i
+    while (i < len && RE_WORD_BOUNDARY.test(sql[i])) i++
     if (i > start) tokens.push(sql.slice(start, i))
   }
   return tokens
@@ -176,19 +185,25 @@ function lowercaseKeywords(sql) {
 
 function highlightSql(sql) {
   const tokens = tokenize(sql)
-  return tokens.map((token) => {
+  const parts = []
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]
     const upper = token.toUpperCase()
-    if (/^\s+$/.test(token)) return token
-    if (KEYWORD_SET.has(upper)) return `<span class="sql-keyword">${token}</span>`
-    if (/^'.*'$/.test(token) || /^".*"$/.test(token)) return `<span class="sql-string">${escapeHtml(token)}</span>`
-    if (/^\d+(\.\d+)?$/.test(token)) return `<span class="sql-number">${token}</span>`
-    if (/^--/.test(token) || /^\/\*/.test(token)) return `<span class="sql-comment">${escapeHtml(token)}</span>`
-    if (/^`.*`$/.test(token)) return `<span class="sql-identifier">${escapeHtml(token)}</span>`
-    return escapeHtml(token)
-  }).join('')
+    const ch = token[0]
+    if (ch <= ' ' && /^\s+$/.test(token)) { parts.push(token); continue }
+    if (KEYWORD_SET.has(upper)) { parts.push('<span class="sql-keyword">', token, '</span>'); continue }
+    if (ch === "'" || ch === '"') { parts.push('<span class="sql-string">', escapeHtml(token), '</span>'); continue }
+    if (ch >= '0' && ch <= '9') { parts.push('<span class="sql-number">', token, '</span>'); continue }
+    if (ch === '-' && token[1] === '-') { parts.push('<span class="sql-comment">', escapeHtml(token), '</span>'); continue }
+    if (ch === '/' && token[1] === '*') { parts.push('<span class="sql-comment">', escapeHtml(token), '</span>'); continue }
+    if (ch === '`') { parts.push('<span class="sql-identifier">', escapeHtml(token), '</span>'); continue }
+    parts.push(escapeHtml(token))
+  }
+  return parts.join('')
 }
 
 function escapeHtml(str) {
+  if (str.indexOf('&') === -1 && str.indexOf('<') === -1 && str.indexOf('>') === -1) return str
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
@@ -201,22 +216,25 @@ function computeSqlOutput(text, mode) {
   return ''
 }
 
+function autoResize(el) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
+
 function SqlPage() {
   const [input, setInput] = useState('')
-  const [mode, setMode] = useState('format') // format | minify | uppercase | lowercase
+  const [mode, setMode] = useState('format')
   const inputRef = useRef(null)
   const outputRef = useRef(null)
 
   const output = useMemo(() => computeSqlOutput(input, mode), [input, mode])
+  const highlightedOutput = useMemo(() => output ? highlightSql(output) : '', [output])
 
-  const autoResize = useCallback((el) => {
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = el.scrollHeight + 'px'
-  }, [])
-
-  useEffect(() => { autoResize(inputRef.current) }, [input, autoResize])
-  useEffect(() => { autoResize(outputRef.current) }, [output, autoResize])
+  useLayoutEffect(() => {
+    autoResize(inputRef.current)
+    autoResize(outputRef.current)
+  }, [input, output])
 
   const handleCopy = useCallback(() => {
     const content = output || input
@@ -224,16 +242,17 @@ function SqlPage() {
     navigator.clipboard.writeText(content)
   }, [output, input])
 
-  const handleClear = useCallback(() => {
-    setInput('')
-  }, [])
+  const handleClear = useCallback(() => setInput(''), [])
+  const setFormatMode = useCallback(() => setMode('format'), [])
+  const setMinifyMode = useCallback(() => setMode('minify'), [])
+  const setUpperMode = useCallback(() => setMode('uppercase'), [])
+  const setLowerMode = useCallback(() => setMode('lowercase'), [])
 
   return (
     <div className="sql-page">
       <h1>SQL Tools</h1>
       <p className="page-subtitle">Format, minify, and transform SQL queries</p>
 
-      {/* Editor Panels with buttons column in between */}
       <div className="sql-panels">
         <div className="sql-panel">
           <div className="panel-header">
@@ -254,10 +273,10 @@ function SqlPage() {
           <button onClick={handleCopy} className="btn-secondary">Copy</button>
           <button onClick={handleClear} className="btn-secondary">Clear</button>
           <div className="actions-divider" />
-          <button onClick={() => setMode('format')} className={mode === 'format' ? 'btn-primary' : ''}>Format</button>
-          <button onClick={() => setMode('minify')} className={mode === 'minify' ? 'btn-primary' : ''}>Minify</button>
-          <button onClick={() => setMode('uppercase')} className={mode === 'uppercase' ? 'btn-primary' : ''}>UPPERCASE</button>
-          <button onClick={() => setMode('lowercase')} className={mode === 'lowercase' ? 'btn-primary' : ''}>lowercase</button>
+          <button onClick={setFormatMode} className={mode === 'format' ? 'btn-primary' : ''}>Format</button>
+          <button onClick={setMinifyMode} className={mode === 'minify' ? 'btn-primary' : ''}>Minify</button>
+          <button onClick={setUpperMode} className={mode === 'uppercase' ? 'btn-primary' : ''}>UPPERCASE</button>
+          <button onClick={setLowerMode} className={mode === 'lowercase' ? 'btn-primary' : ''}>lowercase</button>
         </div>
 
         <div className="sql-panel">
@@ -266,8 +285,8 @@ function SqlPage() {
             <span className="panel-info">{output.length} chars</span>
           </div>
           <div className="sql-editor sql-output" ref={outputRef}>
-            {output ? (
-              <pre className="sql-highlighted" dangerouslySetInnerHTML={{ __html: highlightSql(output) }} />
+            {highlightedOutput ? (
+              <pre className="sql-highlighted" dangerouslySetInnerHTML={{ __html: highlightedOutput }} />
             ) : (
               <span className="sql-placeholder">Output will appear here...</span>
             )}

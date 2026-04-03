@@ -1,28 +1,29 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import './TimePage.css'
-
 
 const ITEM_HEIGHT = 48
 
-function ScrollRoller({ label, value, min, max, onChange }) {
+const ScrollRoller = memo(function ScrollRoller({ label, value, min, max, onChange }) {
   const viewportRef = useRef(null)
   const dragState = useRef({ dragging: false, startY: 0, accumulated: 0 })
   const [offset, setOffset] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const count = max - min + 1
 
-  const wrap = (v) => ((v - min) % count + count) % count + min
+  const wrap = useCallback((v) => ((v - min) % count + count) % count + min, [min, count])
 
   const displayItems = [-2, -1, 0, 1, 2].map(d => wrap(value + d))
 
-  const onPointerDown = (e) => {
+  const onPointerDown = useCallback((e) => {
     e.preventDefault()
     dragState.current = { dragging: true, startY: e.clientY, accumulated: 0 }
+    setIsDragging(true)
     viewportRef.current?.setPointerCapture(e.pointerId)
-  }
+  }, [])
 
-  const onPointerMove = (e) => {
+  const onPointerMove = useCallback((e) => {
     if (!dragState.current.dragging) return
     const dy = e.clientY - dragState.current.startY
     dragState.current.startY = e.clientY
@@ -30,30 +31,31 @@ function ScrollRoller({ label, value, min, max, onChange }) {
 
     while (dragState.current.accumulated >= ITEM_HEIGHT) {
       dragState.current.accumulated -= ITEM_HEIGHT
-      onChange(wrap(value - 1))
+      onChange(prev => wrap(prev - 1))
     }
     while (dragState.current.accumulated <= -ITEM_HEIGHT) {
       dragState.current.accumulated += ITEM_HEIGHT
-      onChange(wrap(value + 1))
+      onChange(prev => wrap(prev + 1))
     }
 
     setOffset(dragState.current.accumulated)
-  }
+  }, [onChange, wrap])
 
-  const onPointerUp = (e) => {
+  const onPointerUp = useCallback((e) => {
     dragState.current.dragging = false
     dragState.current.accumulated = 0
+    setIsDragging(false)
     viewportRef.current?.releasePointerCapture(e.pointerId)
     setOffset(0)
-  }
+  }, [])
 
-  const handleInputCommit = () => {
+  const handleInputCommit = useCallback(() => {
     const num = parseInt(editValue, 10)
     if (!isNaN(num)) {
       onChange(Math.max(min, Math.min(max, num)))
     }
     setEditing(false)
-  }
+  }, [editValue, min, max, onChange])
 
   const baseTranslate = -ITEM_HEIGHT
   const translateY = baseTranslate + offset
@@ -84,7 +86,7 @@ function ScrollRoller({ label, value, min, max, onChange }) {
           className="roller-track"
           style={{
             transform: `translateY(${translateY}px)`,
-            transition: dragState.current.dragging ? 'none' : 'transform 0.15s ease-out',
+            transition: isDragging ? 'none' : 'transform 0.15s ease-out',
           }}
         >
           {displayItems.map((v, i) => (
@@ -96,36 +98,30 @@ function ScrollRoller({ label, value, min, max, onChange }) {
       </div>
     </div>
   )
-}
+})
 
 function TimePage() {
-  const [now, setNow] = useState(new Date())
+  const [millis, setMillis] = useState(() => Date.now())
   const [convertMillis, setConvertMillis] = useState('')
   const [convertResult, setConvertResult] = useState(null)
 
-  // Date to millis — manual text input
   const [dateTextInput, setDateTextInput] = useState('')
   const [dateTextResult, setDateTextResult] = useState(null)
 
-  // Date to millis — picker
   const [calendarDate, setCalendarDate] = useState(() => {
     const n = new Date()
-    const y = n.getFullYear()
-    const m = String(n.getMonth() + 1).padStart(2, '0')
-    const d = String(n.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
   })
-  const [pickerHour, setPickerHour] = useState(new Date().getHours())
-  const [pickerMinute, setPickerMinute] = useState(new Date().getMinutes())
-  const [pickerSecond, setPickerSecond] = useState(new Date().getSeconds())
+  const [pickerHour, setPickerHour] = useState(() => new Date().getHours())
+  const [pickerMinute, setPickerMinute] = useState(() => new Date().getMinutes())
+  const [pickerSecond, setPickerSecond] = useState(() => new Date().getSeconds())
   const [pickerResult, setPickerResult] = useState(null)
 
+  // Update every 200ms instead of 50ms — 5x less renders, still looks real-time
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 50)
+    const timer = setInterval(() => setMillis(Date.now()), 200)
     return () => clearInterval(timer)
   }, [])
-
-  const millis = now.getTime()
 
   const handleMillisConvert = useCallback(() => {
     const ms = parseInt(convertMillis, 10)
@@ -134,10 +130,7 @@ function TimePage() {
       return
     }
     const d = new Date(ms)
-    setConvertResult({
-      utc: d.toUTCString(),
-      local: d.toString(),
-    })
+    setConvertResult({ utc: d.toUTCString(), local: d.toString() })
   }, [convertMillis])
 
   const handleDateTextConvert = useCallback(() => {
@@ -169,55 +162,50 @@ function TimePage() {
     })
   }, [calendarDate, pickerHour, pickerMinute, pickerSecond])
 
-  const fillPickerNow = () => {
+  const fillPickerNow = useCallback(() => {
     const n = new Date()
-    const y = n.getFullYear()
-    const m = String(n.getMonth() + 1).padStart(2, '0')
-    const d = String(n.getDate()).padStart(2, '0')
-    setCalendarDate(`${y}-${m}-${d}`)
+    setCalendarDate(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`)
     setPickerHour(n.getHours())
     setPickerMinute(n.getMinutes())
     setPickerSecond(n.getSeconds())
-  }
+  }, [])
 
-  const dateResultBlock = (result) => {
-    if (!result) return null
-    return (
-      <div className="convert-results">
-        {result.error ? (
-          <div className="error">{result.error}</div>
-        ) : (
-          <div className="time-grid compact">
-            <div className="time-row"><span className="time-label">Milliseconds</span><span className="time-value">{result.millis}</span></div>
-            <div className="time-row"><span className="time-label">Seconds</span><span className="time-value">{result.seconds}</span></div>
-            <div className="time-row"><span className="time-label">UTC</span><span className="time-value">{result.utc}</span></div>
-          </div>
-        )}
-      </div>
-    )
-  }
+  const handleCopyTimestamp = useCallback((e) => {
+    navigator.clipboard.writeText(String(millis))
+    const btn = e.currentTarget
+    btn.textContent = 'Copied!'
+    btn.classList.add('copied')
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied') }, 1500)
+  }, [millis])
+
+  const fillNowMillis = useCallback(() => {
+    setConvertMillis(String(Date.now()))
+  }, [])
+
+  const fillNowText = useCallback(() => {
+    const n = new Date()
+    const y = n.getFullYear()
+    const mo = String(n.getMonth() + 1).padStart(2, '0')
+    const d = String(n.getDate()).padStart(2, '0')
+    const h = String(n.getHours()).padStart(2, '0')
+    const mi = String(n.getMinutes()).padStart(2, '0')
+    const s = String(n.getSeconds()).padStart(2, '0')
+    setDateTextInput(`${y}-${mo}-${d} ${h}:${mi}:${s}`)
+  }, [])
 
   return (
     <div className="time-page">
       <h1>Time / Epoch Converter</h1>
       <p className="page-subtitle">Real-time clock and epoch timestamp converter</p>
 
-      {/* Live Clock */}
       <section className="time-section live-clock">
         <div className="millis-display">
           <div className="millis-label">Current Unix Timestamp (milliseconds)</div>
           <div className="millis-value">{millis.toLocaleString()}</div>
-          <button className="copy-ts-btn btn-secondary" onClick={(e) => {
-            navigator.clipboard.writeText(String(millis))
-            const btn = e.currentTarget
-            btn.textContent = 'Copied!'
-            btn.classList.add('copied')
-            setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied') }, 1500)
-          }}>Copy</button>
+          <button className="copy-ts-btn btn-secondary" onClick={handleCopyTimestamp}>Copy</button>
         </div>
       </section>
 
-      {/* Converters Row */}
       <div className="converters-row">
       <section className="time-section">
         <h2>Milliseconds to Date</h2>
@@ -231,7 +219,7 @@ function TimePage() {
           />
           <div className="converter-buttons">
             <button onClick={handleMillisConvert}>Convert</button>
-            <button className="btn-secondary" onClick={() => { setConvertMillis(String(Date.now())); }}>Now</button>
+            <button className="btn-secondary" onClick={fillNowMillis}>Now</button>
           </div>
         </div>
         {convertResult && (
@@ -248,11 +236,9 @@ function TimePage() {
         )}
       </section>
 
-      {/* Date to Milliseconds */}
       <section className="time-section">
         <h2>Date to Milliseconds</h2>
         <div className="date-to-ms-methods">
-          {/* Method 1: Type it */}
           <div className="method-block">
             <h3>Type a date</h3>
             <div className="converter-input">
@@ -265,24 +251,26 @@ function TimePage() {
               />
               <div className="converter-buttons">
                 <button onClick={handleDateTextConvert}>Convert</button>
-                <button className="btn-secondary" onClick={() => {
-                  const n = new Date()
-                  const y = n.getFullYear()
-                  const mo = String(n.getMonth() + 1).padStart(2, '0')
-                  const d = String(n.getDate()).padStart(2, '0')
-                  const h = String(n.getHours()).padStart(2, '0')
-                  const mi = String(n.getMinutes()).padStart(2, '0')
-                  const s = String(n.getSeconds()).padStart(2, '0')
-                  setDateTextInput(`${y}-${mo}-${d} ${h}:${mi}:${s}`)
-                }}>Now</button>
+                <button className="btn-secondary" onClick={fillNowText}>Now</button>
               </div>
             </div>
-            {dateResultBlock(dateTextResult)}
+            {dateTextResult && (
+              <div className="convert-results">
+                {dateTextResult.error ? (
+                  <div className="error">{dateTextResult.error}</div>
+                ) : (
+                  <div className="time-grid compact">
+                    <div className="time-row"><span className="time-label">Milliseconds</span><span className="time-value">{dateTextResult.millis}</span></div>
+                    <div className="time-row"><span className="time-label">Seconds</span><span className="time-value">{dateTextResult.seconds}</span></div>
+                    <div className="time-row"><span className="time-label">UTC</span><span className="time-value">{dateTextResult.utc}</span></div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="method-divider"><span>or</span></div>
 
-          {/* Method 2: Pick it */}
           <div className="method-block">
             <h3>Pick a date</h3>
             <div className="picker-area">
@@ -303,7 +291,19 @@ function TimePage() {
               <button onClick={handlePickerConvert}>Convert</button>
               <button className="btn-secondary" onClick={fillPickerNow}>Now</button>
             </div>
-            {dateResultBlock(pickerResult)}
+            {pickerResult && (
+              <div className="convert-results">
+                {pickerResult.error ? (
+                  <div className="error">{pickerResult.error}</div>
+                ) : (
+                  <div className="time-grid compact">
+                    <div className="time-row"><span className="time-label">Milliseconds</span><span className="time-value">{pickerResult.millis}</span></div>
+                    <div className="time-row"><span className="time-label">Seconds</span><span className="time-value">{pickerResult.seconds}</span></div>
+                    <div className="time-row"><span className="time-label">UTC</span><span className="time-value">{pickerResult.utc}</span></div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>
